@@ -46,6 +46,12 @@ function avg(...nums) {
   return round1(valid.reduce((a, b) => a + b, 0) / valid.length);
 }
 
+function sum(...nums) {
+  const valid = nums.filter((n) => n !== null && n !== undefined && !isNaN(n));
+  if (!valid.length) return 0;
+  return round1(valid.reduce((a, b) => a + b, 0));
+}
+
 // ──────────────── "FEELS LIKE" CALCULATION ───────────────────────
 // Uses wind-chill (< 10°C) / heat-index (> 27°C) formulas from
 // Environment Canada & NWS for accurate "feels like" rather than
@@ -83,6 +89,142 @@ function getDialAngle(feelsLike) {
   // Map feels-like to -90..+90  where -20°C → -90° and +35°C → +90°
   const clamped = Math.max(-20, Math.min(35, feelsLike));
   return ((clamped + 20) / 55) * 180 - 90; // -90 to +90
+}
+
+function openMeteoCodeToText(code) {
+  const map = {
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Fog",
+    48: "Depositing rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    56: "Light freezing drizzle",
+    57: "Dense freezing drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    66: "Light freezing rain",
+    67: "Heavy freezing rain",
+    71: "Slight snow",
+    73: "Moderate snow",
+    75: "Heavy snow",
+    77: "Snow grains",
+    80: "Slight rain showers",
+    81: "Moderate rain showers",
+    82: "Violent rain showers",
+    85: "Slight snow showers",
+    86: "Heavy snow showers",
+    95: "Thunderstorm",
+    96: "Thunderstorm with hail",
+    99: "Thunderstorm with heavy hail",
+  };
+  return map[code] || "--";
+}
+
+function isLatLonQuery(query) {
+  return /^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$/.test(query || "");
+}
+
+function parseLatLonQuery(query) {
+  const [latStr, lonStr] = query.split(",").map((v) => v.trim());
+  return { lat: parseFloat(latStr), lon: parseFloat(lonStr) };
+}
+
+function getDailyStatsForDate(hourly, targetDate) {
+  const rows = [];
+  for (let i = 0; i < hourly.time.length; i++) {
+    if (!hourly.time[i].startsWith(targetDate)) continue;
+    rows.push({
+      temp: hourly.temperature_2m?.[i],
+      feelsLike: hourly.apparent_temperature?.[i],
+      humidity: hourly.relative_humidity_2m?.[i],
+      wind: hourly.wind_speed_10m?.[i],
+      precip: hourly.precipitation?.[i],
+      code: hourly.weather_code?.[i],
+      uv: hourly.uv_index?.[i],
+    });
+  }
+
+  if (!rows.length) return null;
+
+  const midday = rows[Math.min(12, rows.length - 1)] || rows[0];
+  return {
+    temp: avg(...rows.map((r) => r.temp)),
+    feelsLike: avg(...rows.map((r) => r.feelsLike)),
+    humidity: avg(...rows.map((r) => r.humidity)),
+    wind: avg(...rows.map((r) => r.wind)),
+    precip: sum(...rows.map((r) => r.precip)),
+    condition: openMeteoCodeToText(midday.code),
+    icon: "",
+    uv: Math.max(...rows.map((r) => r.uv ?? 0)),
+  };
+}
+
+async function resolveLocation(query) {
+  if (isLatLonQuery(query)) {
+    const { lat, lon } = parseLatLonQuery(query);
+    const reverseUrl = `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=en&count=1`;
+    const reverseRes = await fetch(reverseUrl);
+    if (!reverseRes.ok) {
+      return { latitude: lat, longitude: lon, displayName: `Lat ${round1(lat)}, Lon ${round1(lon)}` };
+    }
+    const reverseData = await reverseRes.json();
+    const place = reverseData?.results?.[0];
+    const nameParts = [place?.name, place?.admin1, place?.country].filter(Boolean);
+    return {
+      latitude: lat,
+      longitude: lon,
+      displayName: nameParts.length ? nameParts.join(", ") : `Lat ${round1(lat)}, Lon ${round1(lon)}`,
+    };
+  }
+
+  const geocodeUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`;
+  const geocodeRes = await fetch(geocodeUrl);
+  if (!geocodeRes.ok) throw new Error("Could not find that location");
+  const geocodeData = await geocodeRes.json();
+  const result = geocodeData?.results?.[0];
+  if (!result) throw new Error("Location not found");
+
+  const nameParts = [result.name, result.admin1, result.country].filter(Boolean);
+  return {
+    latitude: result.latitude,
+    longitude: result.longitude,
+    displayName: nameParts.join(", "),
+  };
+}
+
+async function fetchOpenMeteoFallback(query) {
+  const location = await resolveLocation(query);
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}&longitude=${location.longitude}&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,precipitation,weather_code,uv_index&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,precipitation,weather_code,uv_index&wind_speed_unit=kmh&temperature_unit=celsius&precipitation_unit=mm&timezone=auto&past_days=1&forecast_days=1`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Open-Meteo fetch failed");
+  const data = await res.json();
+
+  const todayDate = dateStr(new Date());
+  const yesterdayDateObj = new Date();
+  yesterdayDateObj.setDate(yesterdayDateObj.getDate() - 1);
+  const yesterdayDate = dateStr(yesterdayDateObj);
+
+  const yesterday = getDailyStatsForDate(data.hourly, yesterdayDate);
+  const today = getDailyStatsForDate(data.hourly, todayDate);
+  if (!yesterday || !today) throw new Error("Incomplete weather data from Open-Meteo");
+
+  return {
+    sources: [
+      {
+        source: "Open-Meteo",
+        yesterday,
+        today,
+      },
+    ],
+    demo: false,
+    mode: "keyless",
+    displayName: location.displayName,
+  };
 }
 
 // ──────────────── API FETCHERS ────────────────────────────────────
@@ -246,8 +388,8 @@ async function fetchAllSources(city) {
   const dateY = dateStr(yesterday);
 
   if (SETUP_NEEDED) {
-    console.warn("API keys not set — using demo data. Add your free API keys in app.js.");
-    return { sources: getDemoData(), demo: true };
+    console.info("API keys not set — using Open-Meteo fallback for live weather and search.");
+    return fetchOpenMeteoFallback(city);
   }
 
   const results = await Promise.allSettled([
@@ -265,7 +407,7 @@ async function fetchAllSources(city) {
     return { sources: getDemoData(), demo: true };
   }
 
-  return { sources, demo: false };
+  return { sources, demo: false, mode: "multi-source", displayName: city };
 }
 
 // ──────────────── RENDER ──────────────────────────────────────────
@@ -392,7 +534,6 @@ function initWoreButtons() {
   const saved = localStorage.getItem("layerup-wore");
   if (saved) {
     btns.forEach((b) => { if (b.dataset.layer === saved) b.classList.add("selected"); });
-    showWoreFeedback(saved);
   }
 
   btns.forEach((btn) => {
@@ -401,59 +542,27 @@ function initWoreButtons() {
       btn.classList.add("selected");
       const layer = btn.dataset.layer;
       localStorage.setItem("layerup-wore", layer);
-      showWoreFeedback(layer);
+      const fb = $("#wore-feedback");
+      if (fb) {
+        fb.classList.remove("show");
+        fb.textContent = "";
+      }
     });
   });
-}
-
-function showWoreFeedback(layer) {
-  const fb = $("#wore-feedback");
-  const data = window.__layerData;
-  if (!data) return;
-
-  const recommended = getLayerFromFeelsLike(data.finalTFeels);
-  const yesterdayRec = getLayerFromFeelsLike(data.finalYFeels);
-
-  const layerNames = { tshirt: "a T-shirt", sweater: "a sweater", coat: "a coat" };
-  const layerRank  = { tshirt: 3, sweater: 2, coat: 1 }; // higher = warmer weather
-
-  const woreRank = layerRank[layer];
-  const neededRank = layerRank[yesterdayRec.layer];
-  const todayRank = layerRank[recommended.layer];
-
-  let msg = "";
-
-  if (woreRank === neededRank) {
-    msg = `You wore ${layerNames[layer]} yesterday — that was spot-on for ${round1(data.finalYFeels)}°C feels-like. `;
-  } else if (woreRank > neededRank) {
-    msg = `You wore ${layerNames[layer]} yesterday, but it was actually ${yesterdayRec.label.toLowerCase()} (${round1(data.finalYFeels)}°C feels-like). You might have felt cold! `;
-  } else {
-    msg = `You wore ${layerNames[layer]} yesterday — you may have been overdressed since it was ${yesterdayRec.label.toLowerCase()} (${round1(data.finalYFeels)}°C feels-like). `;
-  }
-
-  const diff = round1(data.finalTFeels - data.finalYFeels);
-  if (diff > 2) {
-    msg += `Today is ${diff}°C warmer (feels like), so you can likely wear a lighter layer.`;
-  } else if (diff < -2) {
-    msg += `Today is ${Math.abs(diff)}°C colder (feels like), so add a layer compared to yesterday.`;
-  } else {
-    msg += `Today feels about the same, so yesterday's outfit is a safe bet.`;
-  }
-
-  msg += ` <strong>Recommendation: ${recommended.label}</strong>`;
-
-  fb.innerHTML = msg;
-  fb.classList.add("show");
 }
 
 // ──────────────── BOOT ───────────────────────────────────────────
 async function boot(city) {
   overlay.classList.remove("hidden");
   try {
-    const { sources, demo } = await fetchAllSources(city);
+    const { sources, demo, mode, displayName } = await fetchAllSources(city);
     render(sources);
+    if (displayName) cityInput.value = displayName;
     if (demo) {
       console.info("Showing demo data. To use live weather, add API keys in app.js lines 10-12.");
+    }
+    if (mode === "keyless") {
+      console.info("Running in keyless mode via Open-Meteo.");
     }
   } catch (err) {
     console.error("Boot error:", err);
