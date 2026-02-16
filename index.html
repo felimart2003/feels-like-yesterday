@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LayerUp – What To Wear Today</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="app">
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+      <div class="spinner"></div>
+      <p>Fetching weather data from 3 sources...</p>
+    </div>
+
+    <!-- Location Bar -->
+    <header class="location-bar">
+      <div class="location-input-group">
+        <svg class="icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+          <circle cx="12" cy="10" r="3"/>
+        </svg>
+        <input type="text" id="city-input" placeholder="Enter city name..." value="Toronto" />
+        <button id="search-btn" title="Search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </button>
+        <button id="geo-btn" title="Use my location">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <!-- Data Sources Banner -->
+      <section class="sources-banner">
+        <span class="source" id="src-1"><span class="dot dot-twn"></span>The Weather Network</span>
+        <span class="source" id="src-2"><span class="dot dot-twc"></span>The Weather Channel</span>
+        <span class="source" id="src-3"><span class="dot dot-aw"></span>AccuWeather</span>
+      </section>
+
+      <!-- Today vs Yesterday Hero -->
+      <section class="hero-cards">
+        <!-- Yesterday Card -->
+        <div class="weather-card yesterday-card">
+          <div class="card-label">Yesterday</div>
+          <div class="card-date" id="yesterday-date"></div>
+          <div class="temp-big" id="yesterday-temp">--°</div>
+          <div class="feels-like">Feels like <span id="yesterday-feels">--°</span></div>
+          <div class="condition-row">
+            <img id="yesterday-icon" src="" alt="" class="condition-icon" />
+            <span id="yesterday-condition">--</span>
+          </div>
+          <div class="detail-grid">
+            <div class="detail">
+              <span class="detail-label">Humidity</span>
+              <span class="detail-value" id="yesterday-humidity">--%</span>
+            </div>
+            <div class="detail">
+              <span class="detail-label">Wind</span>
+              <span class="detail-value" id="yesterday-wind">-- km/h</span>
+            </div>
+            <div class="detail">
+              <span class="detail-label">Precip</span>
+              <span class="detail-value" id="yesterday-precip">-- mm</span>
+            </div>
+            <div class="detail">
+              <span class="detail-label">UV Index</span>
+              <span class="detail-value" id="yesterday-uv">--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Today Card -->
+        <div class="weather-card today-card">
+          <div class="card-label">Today</div>
+          <div class="card-date" id="today-date"></div>
+          <div class="temp-big" id="today-temp">--°</div>
+          <div class="feels-like">Feels like <span id="today-feels">--°</span></div>
+          <div class="condition-row">
+            <img id="today-icon" src="" alt="" class="condition-icon" />
+            <span id="today-condition">--</span>
+          </div>
+          <div class="detail-grid">
+            <div class="detail">
+              <span class="detail-label">Humidity</span>
+              <span class="detail-value" id="today-humidity">--%</span>
+            </div>
+            <div class="detail">
+              <span class="detail-label">Wind</span>
+              <span class="detail-value" id="today-wind">-- km/h</span>
+            </div>
+            <div class="detail">
+              <span class="detail-label">Precip</span>
+              <span class="detail-value" id="today-precip">-- mm</span>
+            </div>
+            <div class="detail">
+              <span class="detail-label">UV Index</span>
+              <span class="detail-value" id="today-uv">--</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Change Indicators -->
+      <section class="change-section">
+        <h2>Today vs Yesterday</h2>
+        <div class="change-cards">
+          <div class="change-card" id="temp-change-card">
+            <div class="change-icon-wrap">
+              <svg id="temp-arrow" class="change-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+              </svg>
+            </div>
+            <div class="change-info">
+              <span class="change-label">Temperature</span>
+              <span class="change-value" id="temp-change">--</span>
+            </div>
+          </div>
+          <div class="change-card" id="feels-change-card">
+            <div class="change-icon-wrap">
+              <svg id="feels-arrow" class="change-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+              </svg>
+            </div>
+            <div class="change-info">
+              <span class="change-label">Feels Like</span>
+              <span class="change-value" id="feels-change">--</span>
+            </div>
+          </div>
+          <div class="change-card" id="precip-change-card">
+            <div class="change-icon-wrap">
+              <svg id="precip-arrow" class="change-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+              </svg>
+            </div>
+            <div class="change-info">
+              <span class="change-label">Precipitation</span>
+              <span class="change-value" id="precip-change">--</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Layer Dial -->
+      <section class="layer-section">
+        <h2>What Should You Wear?</h2>
+        <div class="dial-container">
+          <svg class="dial-svg" viewBox="0 0 300 200">
+            <!-- Background arc -->
+            <path d="M 30 170 A 120 120 0 0 1 270 170" fill="none" stroke="#2a2a3a" stroke-width="22" stroke-linecap="round"/>
+            <!-- Colored segments: T-shirt (warm) → Sweater → Coat (cold) -->
+            <path d="M 30 170 A 120 120 0 0 1 110 32" fill="none" stroke="#FF6B6B" stroke-width="22" stroke-linecap="round" opacity="0.25"/>
+            <path d="M 110 32 A 120 120 0 0 1 190 32" fill="none" stroke="#FFD93D" stroke-width="22" stroke-linecap="round" opacity="0.25"/>
+            <path d="M 190 32 A 120 120 0 0 1 270 170" fill="none" stroke="#6BCB77" stroke-width="22" stroke-linecap="round" opacity="0.25"/>
+            <!-- Labels on arc -->
+            <text x="52" y="148" class="dial-label" fill="#FF6B6B">🧥 Coat</text>
+            <text x="122" y="28" class="dial-label" fill="#FFD93D">🧶 Sweater</text>
+            <text x="220" y="148" class="dial-label" fill="#6BCB77">👕 T-Shirt</text>
+            <!-- Needle -->
+            <line id="dial-needle" x1="150" y1="170" x2="150" y2="55" stroke="#fff" stroke-width="4" stroke-linecap="round" transform="rotate(0, 150, 170)"/>
+            <circle cx="150" cy="170" r="8" fill="#fff"/>
+          </svg>
+          <div class="dial-readout">
+            <span class="dial-recommendation" id="dial-recommendation">--</span>
+            <span class="dial-detail" id="dial-detail"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- What Did You Wear Yesterday? -->
+      <section class="wore-section">
+        <h2>What Did You Wear Yesterday?</h2>
+        <p class="wore-subtitle">This helps calibrate recommendations to your personal comfort.</p>
+        <div class="wore-options">
+          <button class="wore-btn" data-layer="tshirt">
+            <span class="wore-emoji">👕</span>
+            <span class="wore-label">T-Shirt</span>
+            <span class="wore-desc">Light &amp; breezy</span>
+          </button>
+          <button class="wore-btn" data-layer="sweater">
+            <span class="wore-emoji">🧶</span>
+            <span class="wore-label">Sweater</span>
+            <span class="wore-desc">Comfy layer</span>
+          </button>
+          <button class="wore-btn" data-layer="coat">
+            <span class="wore-emoji">🧥</span>
+            <span class="wore-label">Coat</span>
+            <span class="wore-desc">Bundled up</span>
+          </button>
+        </div>
+        <div class="wore-feedback" id="wore-feedback"></div>
+      </section>
+
+      <!-- Source Breakdown -->
+      <section class="breakdown-section">
+        <h2>Source Breakdown</h2>
+        <div class="breakdown-table-wrap">
+          <table class="breakdown-table">
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Temp (°C)</th>
+                <th>Feels Like</th>
+                <th>Humidity</th>
+                <th>Wind</th>
+                <th>Precip</th>
+              </tr>
+            </thead>
+            <tbody id="breakdown-body">
+              <tr><td colspan="6" class="no-data">Loading...</td></tr>
+            </tbody>
+            <tfoot>
+              <tr class="avg-row" id="avg-row">
+                <td><strong>Average</strong></td>
+                <td id="avg-temp">--</td>
+                <td id="avg-feels">--</td>
+                <td id="avg-humidity">--</td>
+                <td id="avg-wind">--</td>
+                <td id="avg-precip">--</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>LayerUp &copy; 2026 &mdash; Data sourced from The Weather Network, The Weather Channel &amp; AccuWeather (via aggregated APIs)</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
