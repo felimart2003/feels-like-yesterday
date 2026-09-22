@@ -4,18 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LayerUp – What To Wear Today</title>
+  <meta name="description" content="Compare today’s weather with yesterday and find the right layer. A free, keyless weather app with city search and private outfit notes." />
+  <meta name="theme-color" content="#0f0f1a" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to forecast</a>
   <div id="app">
     <!-- Loading Overlay -->
     <div id="loading-overlay" class="loading-overlay">
       <div class="spinner"></div>
-      <p>Fetching weather data from 3 sources...</p>
+      <p>Fetching your local forecast…</p>
     </div>
 
+    <div class="brand"><span class="eyebrow">A LITTLE WEATHER CONTEXT</span><h1>Feels like yesterday?<br><span>Dress for today.</span></h1><p>Compare the forecast. Find your layer. Head outside.</p></div>
     <!-- Location Bar -->
     <header class="location-bar">
       <div class="location-input-group">
@@ -23,7 +27,7 @@
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
           <circle cx="12" cy="10" r="3"/>
         </svg>
-        <input type="text" id="city-input" placeholder="Enter city name..." value="Toronto" />
+        <input type="text" id="city-input" aria-label="City name" maxlength="120" placeholder="Enter city name..." value="Toronto" />
         <button id="search-btn" title="Search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -37,12 +41,12 @@
       </div>
     </header>
 
-    <main>
+    <main id="main">
+      <div class="status-row"><p id="status" role="status" aria-live="polite"></p><button id="demo-btn" class="sample-button">Explore sample</button></div>
+      <div id="forecast" hidden><h2 id="forecast-location"></h2><p class="forecast-note">Daily averages · °C · today's full-day forecast compared with yesterday</p>
       <!-- Data Sources Banner -->
       <section class="sources-banner">
-        <span class="source" id="src-1"><span class="dot dot-twn"></span>The Weather Network</span>
-        <span class="source" id="src-2"><span class="dot dot-twc"></span>The Weather Channel</span>
-        <span class="source" id="src-3"><span class="dot dot-aw"></span>AccuWeather</span>
+        <span class="source" id="src-1">Open-Meteo</span>
       </section>
 
       <!-- Today vs Yesterday Hero -->
@@ -177,7 +181,7 @@
       <!-- What Did You Wear Yesterday? -->
       <section class="wore-section">
         <h2>What Did You Wear Yesterday?</h2>
-        <p class="wore-subtitle">This helps calibrate recommendations to your personal comfort.</p>
+        <p class="wore-subtitle">Remember your outfit and compare how today feels. Saved only on this device.</p>
         <div class="wore-options">
           <button class="wore-btn" data-layer="tshirt">
             <span class="wore-emoji">👕</span>
@@ -198,9 +202,9 @@
         <div class="wore-feedback" id="wore-feedback"></div>
       </section>
 
-      <!-- Source Breakdown -->
+      <!-- Forecast details -->
       <section class="breakdown-section">
-        <h2>Source Breakdown</h2>
+        <h2>Forecast details</h2>
         <div class="breakdown-table-wrap">
           <table class="breakdown-table">
             <thead>
@@ -218,7 +222,7 @@
             </tbody>
             <tfoot>
               <tr class="avg-row" id="avg-row">
-                <td><strong>Average</strong></td>
+                <td><strong>Daily summary</strong></td>
                 <td id="avg-temp">--</td>
                 <td id="avg-feels">--</td>
                 <td id="avg-humidity">--</td>
@@ -229,10 +233,11 @@
           </table>
         </div>
       </section>
+      </div>
     </main>
 
     <footer>
-      <p>LayerUp &copy; 2026 &mdash; Data sourced from The Weather Network, The Weather Channel &amp; AccuWeather (via aggregated APIs)</p>
+      <p>LayerUp &copy; 2026 · Weather by <a href="https://open-meteo.com/">Open-Meteo</a> · <a href="https://github.com/felimart2003/feels-like-yesterday">View source</a><br>Layer suggestions are general comfort guidance. Check local alerts before heading out.</p>
     </footer>
   </div>
 

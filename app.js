@@ -1,17 +1,8 @@
 /* ==========================================================
    LayerUp – app.js
-   Pulls weather from 3 free API sources, averages them,
+   Uses keyless Open-Meteo daily forecasts,
    shows yesterday vs today with layer recommendation.
    ========================================================== */
-
-// ──────────────────────────── API KEYS ────────────────────────────
-// Free-tier keys – replace with your own if these hit limits.
-const WEATHERAPI_KEY  = ""; // https://www.weatherapi.com  (free)
-const OPENWEATHER_KEY = ""; // https://openweathermap.org  (free)
-const VISUALCROSS_KEY = ""; // https://www.visualcrossing.com (free)
-
-// ──────────────────────────── CONFIG ──────────────────────────────
-const SETUP_NEEDED = !(WEATHERAPI_KEY && OPENWEATHER_KEY && VISUALCROSS_KEY);
 
 // ──────────────────────────── DOM REFS ────────────────────────────
 const $ = (s) => document.querySelector(s);
@@ -33,48 +24,16 @@ function round1(n) {
   return Math.round(n * 10) / 10;
 }
 
-function pctChange(oldVal, newVal) {
-  if (oldVal === 0 && newVal === 0) return { pct: 0, dir: "same" };
-  if (oldVal === 0) return { pct: 100, dir: "up" };
-  const pct = round1(((newVal - oldVal) / Math.abs(oldVal)) * 100);
-  return { pct: Math.abs(pct), dir: pct > 0.5 ? "up" : pct < -0.5 ? "down" : "same" };
-}
-
 function avg(...nums) {
-  const valid = nums.filter((n) => n !== null && n !== undefined && !isNaN(n));
-  if (!valid.length) return 0;
+  const valid = nums.filter(Number.isFinite);
+  if (!valid.length) return null;
   return round1(valid.reduce((a, b) => a + b, 0) / valid.length);
 }
 
 function sum(...nums) {
-  const valid = nums.filter((n) => n !== null && n !== undefined && !isNaN(n));
-  if (!valid.length) return 0;
+  const valid = nums.filter(Number.isFinite);
+  if (!valid.length) return null;
   return round1(valid.reduce((a, b) => a + b, 0));
-}
-
-// ──────────────── "FEELS LIKE" CALCULATION ───────────────────────
-// Uses wind-chill (< 10°C) / heat-index (> 27°C) formulas from
-// Environment Canada & NWS for accurate "feels like" rather than
-// relying on a single provider.
-function computeFeelsLike(tempC, windKph, humidityPct) {
-  const windMph = windKph * 0.621371;
-  // Wind Chill (Celsius) – valid when T ≤ 10 °C and wind > 4.8 km/h
-  if (tempC <= 10 && windKph > 4.8) {
-    const wc = 13.12 + 0.6215 * tempC - 11.37 * Math.pow(windKph, 0.16) + 0.3965 * tempC * Math.pow(windKph, 0.16);
-    return round1(wc);
-  }
-  // Heat Index (Celsius) – valid when T ≥ 27 °C
-  if (tempC >= 27) {
-    const T = tempC * 9 / 5 + 32; // convert to °F for Rothfusz formula
-    const R = humidityPct;
-    let HI = -42.379 + 2.04901523*T + 10.14333127*R
-             - 0.22475541*T*R - 0.00683783*T*T
-             - 0.05481717*R*R + 0.00122874*T*T*R
-             + 0.00085282*T*R*R - 0.00000199*T*T*R*R;
-    return round1((HI - 32) * 5 / 9);
-  }
-  // Mild range – feels like ≈ actual temp
-  return round1(tempC);
 }
 
 // ──────────────── LAYER LOGIC ────────────────────────────────────
@@ -86,9 +45,8 @@ function getLayerFromFeelsLike(feelsLike) {
 
 // Dial angle: -90° (coat/cold) → 0° (sweater) → +90° (t-shirt/warm)
 function getDialAngle(feelsLike) {
-  // Map feels-like to -90..+90  where -20°C → -90° and +35°C → +90°
-  const clamped = Math.max(-20, Math.min(35, feelsLike));
-  return ((clamped + 20) / 55) * 180 - 90; // -90 to +90
+  // Align the needle with the clothing label bands.
+  return Math.max(-90, Math.min(90, (feelsLike - 15) * 6));
 }
 
 function openMeteoCodeToText(code) {
@@ -150,6 +108,9 @@ function getDailyStatsForDate(hourly, targetDate) {
   }
 
   if (!rows.length) return null;
+  if (rows.some(row => [row.temp, row.feelsLike, row.humidity, row.wind, row.precip, row.uv].some(value => !Number.isFinite(value)))) {
+    throw new Error("Weather provider returned missing measurements. Please try again later.");
+  }
 
   const midday = rows[Math.min(12, rows.length - 1)] || rows[0];
   return {
@@ -167,23 +128,11 @@ function getDailyStatsForDate(hourly, targetDate) {
 async function resolveLocation(query) {
   if (isLatLonQuery(query)) {
     const { lat, lon } = parseLatLonQuery(query);
-    const reverseUrl = `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=en&count=1`;
-    const reverseRes = await fetch(reverseUrl);
-    if (!reverseRes.ok) {
-      return { latitude: lat, longitude: lon, displayName: `Lat ${round1(lat)}, Lon ${round1(lon)}` };
-    }
-    const reverseData = await reverseRes.json();
-    const place = reverseData?.results?.[0];
-    const nameParts = [place?.name, place?.admin1, place?.country].filter(Boolean);
-    return {
-      latitude: lat,
-      longitude: lon,
-      displayName: nameParts.length ? nameParts.join(", ") : `Lat ${round1(lat)}, Lon ${round1(lon)}`,
-    };
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) throw new Error("Coordinates are out of range.");
+    return { latitude: lat, longitude: lon, displayName: `Location ${lat.toFixed(2)}, ${lon.toFixed(2)}` };
   }
-
   const geocodeUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`;
-  const geocodeRes = await fetch(geocodeUrl);
+  const geocodeRes = await fetch(geocodeUrl, { signal: AbortSignal.timeout(12000) });
   if (!geocodeRes.ok) throw new Error("Could not find that location");
   const geocodeData = await geocodeRes.json();
   const result = geocodeData?.results?.[0];
@@ -199,21 +148,23 @@ async function resolveLocation(query) {
 
 async function fetchOpenMeteoFallback(query) {
   const location = await resolveLocation(query);
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}&longitude=${location.longitude}&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,precipitation,weather_code,uv_index&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,precipitation,weather_code,uv_index&wind_speed_unit=kmh&temperature_unit=celsius&precipitation_unit=mm&timezone=auto&past_days=1&forecast_days=1`;
-  const res = await fetch(url);
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}&longitude=${location.longitude}&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,precipitation,weather_code,uv_index&current=temperature_2m&wind_speed_unit=kmh&temperature_unit=celsius&precipitation_unit=mm&timezone=auto&past_days=1&forecast_days=1`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
   if (!res.ok) throw new Error("Open-Meteo fetch failed");
   const data = await res.json();
 
-  const todayDate = dateStr(new Date());
-  const yesterdayDateObj = new Date();
-  yesterdayDateObj.setDate(yesterdayDateObj.getDate() - 1);
+  // API timestamps use the selected location's timezone, not the visitor's timezone.
+  const todayDate = data.current?.time?.slice(0, 10);
+  if (!todayDate || !Array.isArray(data.hourly?.time)) throw new Error("Incomplete weather response.");
+  const yesterdayDateObj = new Date(todayDate + "T12:00:00Z");
+  yesterdayDateObj.setUTCDate(yesterdayDateObj.getUTCDate() - 1);
   const yesterdayDate = dateStr(yesterdayDateObj);
-
   const yesterday = getDailyStatsForDate(data.hourly, yesterdayDate);
   const today = getDailyStatsForDate(data.hourly, todayDate);
   if (!yesterday || !today) throw new Error("Incomplete weather data from Open-Meteo");
 
   return {
+    dates: { today: todayDate, yesterday: yesterdayDate },
     sources: [
       {
         source: "Open-Meteo",
@@ -227,194 +178,17 @@ async function fetchOpenMeteoFallback(query) {
   };
 }
 
-// ──────────────── API FETCHERS ────────────────────────────────────
-// Source 1: WeatherAPI.com  (labelled "The Weather Network")
-async function fetchWeatherAPI(city, dateY) {
-  const urlYesterday = `https://api.weatherapi.com/v1/history.json?key=${WEATHERAPI_KEY}&q=${encodeURIComponent(city)}&dt=${dateY}`;
-  const urlToday     = `https://api.weatherapi.com/v1/forecast.json?key=${WEATHERAPI_KEY}&q=${encodeURIComponent(city)}&days=1`;
-  const [rY, rT] = await Promise.all([fetch(urlYesterday), fetch(urlToday)]);
-  if (!rY.ok || !rT.ok) throw new Error("WeatherAPI fetch failed");
-  const [dY, dT] = await Promise.all([rY.json(), rT.json()]);
-  const yDay = dY.forecast.forecastday[0].day;
-  const tDay = dT.forecast.forecastday[0].day;
-  const yCur = dY.forecast.forecastday[0].hour[12] || dY.forecast.forecastday[0].hour[0]; // noon snapshot
-  const tCur = dT.current;
-  return {
-    source: "The Weather Network",
-    yesterday: {
-      temp: yDay.avgtemp_c,
-      feelsLike: computeFeelsLike(yDay.avgtemp_c, yCur.wind_kph, yCur.humidity),
-      humidity: yCur.humidity,
-      wind: yCur.wind_kph,
-      precip: yDay.totalprecip_mm,
-      condition: yDay.condition.text,
-      icon: "https:" + yDay.condition.icon,
-      uv: yDay.uv,
-    },
-    today: {
-      temp: tCur.temp_c,
-      feelsLike: computeFeelsLike(tCur.temp_c, tCur.wind_kph, tCur.humidity),
-      humidity: tCur.humidity,
-      wind: tCur.wind_kph,
-      precip: tDay.totalprecip_mm,
-      condition: tCur.condition.text,
-      icon: "https:" + tCur.condition.icon,
-      uv: tCur.uv,
-    },
-  };
-}
-
-// Source 2: OpenWeatherMap  (labelled "The Weather Channel")
-async function fetchOpenWeather(city, dateY) {
-  // Get coordinates first
-  const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${OPENWEATHER_KEY}`;
-  const geoRes = await fetch(geoUrl);
-  if (!geoRes.ok) throw new Error("OWM geo failed");
-  const geoData = await geoRes.json();
-  if (!geoData.length) throw new Error("City not found in OWM");
-  const { lat, lon } = geoData[0];
-
-  // Yesterday – use the "timemachine" OneCall endpoint (free for 5 days back)
-  const yesterdayTs = Math.floor(new Date(dateY + "T12:00:00").getTime() / 1000);
-  const histUrl = `https://api.openweathermap.org/data/3.0/onecall/timemachine?lat=${lat}&lon=${lon}&dt=${yesterdayTs}&units=metric&appid=${OPENWEATHER_KEY}`;
-  // Today – current weather
-  const curUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${OPENWEATHER_KEY}`;
-  const foreUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&cnt=8&appid=${OPENWEATHER_KEY}`;
-
-  const [histRes, curRes, foreRes] = await Promise.all([fetch(histUrl), fetch(curUrl), fetch(foreUrl)]);
-
-  let yesterdayData = null;
-  if (histRes.ok) {
-    const hJson = await histRes.json();
-    const d = hJson.data ? hJson.data[0] : hJson;
-    yesterdayData = {
-      temp: d.temp,
-      feelsLike: computeFeelsLike(d.temp, (d.wind_speed || 0) * 3.6, d.humidity),
-      humidity: d.humidity,
-      wind: round1((d.wind_speed || 0) * 3.6),
-      precip: d.rain ? (d.rain["1h"] || 0) : 0,
-      condition: d.weather?.[0]?.description || "--",
-      icon: d.weather?.[0]?.icon ? `https://openweathermap.org/img/wn/${d.weather[0].icon}@2x.png` : "",
-      uv: d.uvi || 0,
-    };
-  }
-
-  let todayData = null;
-  if (curRes.ok) {
-    const c = await curRes.json();
-    const precipToday = (c.rain?.["1h"] || 0) + (c.snow?.["1h"] || 0);
-    todayData = {
-      temp: c.main.temp,
-      feelsLike: computeFeelsLike(c.main.temp, (c.wind?.speed || 0) * 3.6, c.main.humidity),
-      humidity: c.main.humidity,
-      wind: round1((c.wind?.speed || 0) * 3.6),
-      precip: round1(precipToday),
-      condition: c.weather?.[0]?.description || "--",
-      icon: c.weather?.[0]?.icon ? `https://openweathermap.org/img/wn/${c.weather[0].icon}@2x.png` : "",
-      uv: 0,
-    };
-  }
-
-  return { source: "The Weather Channel", yesterday: yesterdayData, today: todayData };
-}
-
-// Source 3: Visual Crossing  (labelled "AccuWeather")
-async function fetchVisualCrossing(city, dateY) {
-  const todayStr = dateStr(new Date());
-  const url = `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${encodeURIComponent(city)}/${dateY}/${todayStr}?unitGroup=metric&key=${VISUALCROSS_KEY}&contentType=json&include=days,current`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Visual Crossing fetch failed");
-  const data = await res.json();
-  const yDay = data.days.find((d) => d.datetime === dateY) || data.days[0];
-  const tDay = data.days.find((d) => d.datetime === todayStr) || data.days[data.days.length - 1];
-  const cur  = data.currentConditions || tDay;
-
-  return {
-    source: "AccuWeather",
-    yesterday: {
-      temp: yDay.temp,
-      feelsLike: computeFeelsLike(yDay.temp, yDay.windspeed, yDay.humidity),
-      humidity: yDay.humidity,
-      wind: round1(yDay.windspeed),
-      precip: yDay.precip || 0,
-      condition: yDay.conditions || "--",
-      icon: "",
-      uv: yDay.uvindex || 0,
-    },
-    today: {
-      temp: cur.temp ?? tDay.temp,
-      feelsLike: computeFeelsLike(cur.temp ?? tDay.temp, cur.windspeed ?? tDay.windspeed, cur.humidity ?? tDay.humidity),
-      humidity: cur.humidity ?? tDay.humidity,
-      wind: round1(cur.windspeed ?? tDay.windspeed),
-      precip: tDay.precip || 0,
-      condition: cur.conditions || tDay.conditions || "--",
-      icon: "",
-      uv: cur.uvindex ?? tDay.uvindex ?? 0,
-    },
-  };
-}
-
-// ──────────────── DEMO / FALLBACK DATA ───────────────────────────
 function getDemoData() {
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  
-  // Realistic winter-ish demo data for Toronto in February
-  return [
-    {
-      source: "The Weather Network",
-      yesterday: { temp: -5.2, feelsLike: -11.3, humidity: 72, wind: 22, precip: 1.4, condition: "Light snow", icon: "", uv: 1 },
-      today:     { temp: -3.0, feelsLike: -8.5,  humidity: 68, wind: 18, precip: 0.2, condition: "Partly cloudy", icon: "", uv: 2 },
-    },
-    {
-      source: "The Weather Channel",
-      yesterday: { temp: -4.8, feelsLike: -10.8, humidity: 74, wind: 20, precip: 1.6, condition: "Snow showers", icon: "", uv: 1 },
-      today:     { temp: -2.5, feelsLike: -7.9,  humidity: 65, wind: 17, precip: 0.0, condition: "Cloudy", icon: "", uv: 2 },
-    },
-    {
-      source: "AccuWeather",
-      yesterday: { temp: -5.5, feelsLike: -12.0, humidity: 70, wind: 24, precip: 1.2, condition: "Snow", icon: "", uv: 1 },
-      today:     { temp: -3.3, feelsLike: -9.1,  humidity: 70, wind: 19, precip: 0.4, condition: "Mostly cloudy", icon: "", uv: 2 },
-    },
-  ];
-}
-
-// ──────────────── MAIN FETCH ORCHESTRATOR ─────────────────────────
-async function fetchAllSources(city) {
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  const dateY = dateStr(yesterday);
-
-  if (SETUP_NEEDED) {
-    console.info("API keys not set — using Open-Meteo fallback for live weather and search.");
-    return fetchOpenMeteoFallback(city);
-  }
-
-  const results = await Promise.allSettled([
-    fetchWeatherAPI(city, dateY),
-    fetchOpenWeather(city, dateY),
-    fetchVisualCrossing(city, dateY),
-  ]);
-
-  const sources = results
-    .filter((r) => r.status === "fulfilled" && r.value)
-    .map((r) => r.value);
-
-  if (!sources.length) {
-    console.warn("All live APIs failed — falling back to demo data.");
-    return { sources: getDemoData(), demo: true };
-  }
-
-  return { sources, demo: false, mode: "multi-source", displayName: city };
+  return [{ source: "Illustrative sample — not live weather",
+    yesterday: {temp: 12, feelsLike: 10, humidity: 72, wind: 22, precip: 1.4, condition: "Light rain", uv: 2},
+    today: {temp: 18, feelsLike: 17, humidity: 60, wind: 12, precip: 0, condition: "Partly cloudy", uv: 4}
+  }];
 }
 
 // ──────────────── RENDER ──────────────────────────────────────────
-function render(sources) {
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
+function render(sources, dates) {
+  const today = dates ? new Date(dates.today + "T12:00:00") : new Date();
+  const yesterday = dates ? new Date(dates.yesterday + "T12:00:00") : new Date(today.getTime() - 86400000);
 
   // --- Compute averages ---
   const yTemps  = sources.map((s) => s.yesterday?.temp).filter((v) => v != null);
@@ -445,9 +219,9 @@ function render(sources) {
   const avgTPrec  = avg(...tPrecip);
   const avgTUv    = avg(...tUv);
 
-  // Recompute feels-like from averaged raw values for maximum accuracy
-  const finalYFeels = computeFeelsLike(avgYTemp, avgYWind, avgYHum);
-  const finalTFeels = computeFeelsLike(avgTTemp, avgTWind, avgTHum);
+  // Preserve the provider apparent-temperature measurements.
+  const finalYFeels = avgYFeels;
+  const finalTFeels = avgTFeels;
 
   // --- Yesterday card ---
   $("#yesterday-date").textContent = formatDate(yesterday);
@@ -483,6 +257,7 @@ function render(sources) {
   renderChange("precip", avgYPrec,  avgTPrec,  " mm");
 
   // --- Dial ---
+  $("#wore-feedback").classList.remove("show");
   const angle = getDialAngle(finalTFeels);
   $("#dial-needle").setAttribute("transform", `rotate(${angle}, 150, 170)`);
   const layer = getLayerFromFeelsLike(finalTFeels);
@@ -510,94 +285,96 @@ function render(sources) {
   $("#avg-wind").textContent    = `${avgTWind} km/h`;
   $("#avg-precip").textContent  = `${avgTPrec} mm`;
 
-  // --- Source dots active ---
-  const srcEls = [$("#src-1"), $("#src-2"), $("#src-3")];
-  sources.forEach((_, i) => { if (srcEls[i]) srcEls[i].classList.add("active"); });
-
+  $("#src-1").textContent = sources[0].source;
   // Store data for wore-section interaction
   window.__layerData = { finalYFeels, finalTFeels, avgYTemp, avgTTemp, avgYWind, avgTWind, avgYHum, avgTHum };
 }
 
 function renderChange(key, oldVal, newVal, unit) {
-  const { pct, dir } = pctChange(oldVal, newVal);
+  const dir = newVal > oldVal ? "up" : newVal < oldVal ? "down" : "same";
   const card  = $(`#${key}-change-card`);
   const value = $(`#${key}-change`);
   const diff = round1(newVal - oldVal);
   const sign = diff > 0 ? "+" : "";
   card.className = `change-card ${dir}`;
-  value.textContent = `${sign}${diff}${unit} (${dir === "same" ? "~0" : (dir === "up" ? "+" : "-") + pct}%)`;
+  value.textContent = `${sign}${diff}${unit}`;
 }
 
-// ──────────────── WORE YESTERDAY LOGIC ───────────────────────────
-function initWoreButtons() {
-  const btns = document.querySelectorAll(".wore-btn");
-  const saved = localStorage.getItem("layerup-wore");
-  if (saved) {
-    btns.forEach((b) => { if (b.dataset.layer === saved) b.classList.add("selected"); });
-  }
-
-  btns.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      btns.forEach((b) => b.classList.remove("selected"));
-      btn.classList.add("selected");
-      const layer = btn.dataset.layer;
-      localStorage.setItem("layerup-wore", layer);
-      const fb = $("#wore-feedback");
-      if (fb) {
-        fb.classList.remove("show");
-        fb.textContent = "";
-      }
-    });
+// Local preferences are optional: restricted browser storage must not break weather.
+function storageGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
+function storageSet(key, value) { try { localStorage.setItem(key, value); return true; } catch { return false; } }
+let activeDates;
+let activeLocation = "";
+function updateWoreButtons() {
+  const key = `layerup-wore:${activeLocation}:${activeDates?.yesterday || "sample"}`;
+  const saved = storageGet(key);
+  document.querySelectorAll(".wore-btn").forEach(button => {
+    const selected = button.dataset.layer === saved;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
   });
 }
-
-// ──────────────── BOOT ───────────────────────────────────────────
+document.querySelectorAll(".wore-btn").forEach(button => {
+  button.addEventListener("click", () => {
+    const key = `layerup-wore:${activeLocation}:${activeDates?.yesterday || "sample"}`;
+    const stored = storageSet(key, button.dataset.layer);
+    updateWoreButtons();
+    const feedback = $("#wore-feedback");
+    feedback.classList.add("show");
+    const data = window.__layerData;
+    const difference = data ? round1(data.finalTFeels - data.finalYFeels) : 0;
+    feedback.textContent = `${stored ? "Saved on this device." : "Browser storage is unavailable."} Today feels ${Math.abs(difference)}°C ${difference >= 0 ? "warmer" : "cooler"}. Use yesterday's outfit as a starting point and adjust for your comfort.`;
+  });
+});
+function setStatus(message, error = false) {
+  $("#status").textContent = message;
+  $("#status").classList.toggle("error", error);
+}
+let requestId = 0;
 async function boot(city) {
+  const id = ++requestId;
+  if (!city.trim()) { setStatus("Enter a city to search.", true); return; }
   overlay.classList.remove("hidden");
+  setStatus("Finding your forecast…");
   try {
-    const { sources, demo, mode, displayName } = await fetchAllSources(city);
-    render(sources);
-    if (displayName) cityInput.value = displayName;
-    if (demo) {
-      console.info("Showing demo data. To use live weather, add API keys in app.js lines 10-12.");
-    }
-    if (mode === "keyless") {
-      console.info("Running in keyless mode via Open-Meteo.");
-    }
-  } catch (err) {
-    console.error("Boot error:", err);
-    // Fallback to demo
-    render(getDemoData());
+    const { sources, displayName, dates } = await fetchOpenMeteoFallback(city);
+    if (id !== requestId) return;
+    render(sources, dates);
+    activeDates = dates;
+    activeLocation = displayName;
+    $("#forecast").hidden = false;
+    $("#forecast-location").textContent = displayName;
+    storageSet("layerup-city", city);
+    setStatus("Live forecast · Daily averages in local time · Updated " + new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}));
+    updateWoreButtons();
+  } catch (error) {
+    if (id !== requestId) return;
+    setStatus((error.name === "TimeoutError" ? "The weather service timed out." : error.message) + " Try another city, retry, or explore the sample forecast. Any forecast below is from your previous selection.", true);
   } finally {
-    overlay.classList.add("hidden");
-    initWoreButtons();
+    if (id === requestId) overlay.classList.add("hidden");
   }
 }
-
-// ──────────────── EVENT LISTENERS ─────────────────────────────────
-searchBtn.addEventListener("click", () => {
-  const city = cityInput.value.trim();
-  if (city) boot(city);
+searchBtn.addEventListener("click", () => boot(cityInput.value.trim()));
+cityInput.addEventListener("keydown", event => { if (event.key === "Enter") boot(cityInput.value.trim()); });
+$("#demo-btn").addEventListener("click", () => {
+  ++requestId;
+  overlay.classList.add("hidden");
+  activeDates = undefined;
+  activeLocation = "Sample";
+  render(getDemoData());
+  $("#forecast").hidden = false;
+  $("#forecast-location").textContent = "Sample forecast";
+  setStatus("DEMO · Illustrative weather only. Search for a city to see a live forecast.");
+  updateWoreButtons();
 });
-
-cityInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    const city = cityInput.value.trim();
-    if (city) boot(city);
-  }
-});
-
 geoBtn.addEventListener("click", () => {
-  if (!navigator.geolocation) return alert("Geolocation not supported.");
+  if (!navigator.geolocation) { setStatus("Location is unavailable. Search by city instead.", true); return; }
+  setStatus("Waiting for location permission…");
   navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      const q = `${pos.coords.latitude},${pos.coords.longitude}`;
-      cityInput.value = "My Location";
-      boot(q);
-    },
-    () => alert("Location access denied.")
+    position => boot(`${position.coords.latitude},${position.coords.longitude}`),
+    () => setStatus("Could not access your location. Search by city instead.", true),
+    {timeout: 10000, maximumAge: 300000}
   );
 });
-
-// Start with default city
-boot(cityInput.value.trim() || "Toronto");
+cityInput.value = storageGet("layerup-city") || "Toronto";
+boot(cityInput.value);

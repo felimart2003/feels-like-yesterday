@@ -618,3 +618,21 @@ footer {
     max-width: 260px;
   }
 }
+
+/* Portfolio finish and accessible states. */
+[hidden] { display: none !important; }
+.brand { padding: 64px 0 16px; text-align: center; }
+.eyebrow { color: #9eabd1; font-size: .7rem; font-weight: 700; letter-spacing: .2em; }
+h1 { font-size: clamp(2.5rem, 6vw, 4rem); line-height: 1.12; letter-spacing: -.055em; margin: 18px 0; }
+h1 span { color: #a6e5c1; }
+.brand p, .forecast-note { color: #aaaac2; }
+.status-row { display: flex; align-items: center; gap: 20px; justify-content: space-between; margin: 20px 0 32px; font-size: .82rem; }
+#status { color: #aaaac2; } #status.error { color: #ffc49b; }
+.sample-button { flex-shrink: 0; border: 1px solid #45455d; border-radius: 8px; padding: 9px 12px; background: transparent; color: #e8e8f0; cursor: pointer; }
+#forecast-location { font-size: 1.35rem; } .forecast-note { font-size: .8rem; margin-top: 4px; }
+.sources-banner { justify-content: flex-start; }
+:focus-visible { outline: 3px solid #a6e5c1; outline-offset: 4px; }
+a { color: #a6e5c1; } .skip-link { position: absolute; top: -60px; } .skip-link:focus { top: 8px; }
+#city-input { min-width: 0; }
+@media(max-width:480px) { .brand {padding-top: 36px;} .status-row {align-items: flex-start; flex-direction: column; gap: 10px;} }
+@media(prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }

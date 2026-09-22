@@ -1,61 +1,52 @@
-# LayerUp – What To Wear Today
+# LayerUp · Feels Like Yesterday
 
-LayerUp is a small front-end weather app that compares **today vs yesterday** and suggests what layer to wear (T-shirt, sweater, or coat) based on "feels like" conditions.
+**A little weather context before you head outside.** Compare today's forecast with yesterday, see what changed, and choose a comfortable layer.
 
-## What this app does
+[Live demo](https://felimart2003.github.io/feels-like-yesterday/) · [Source](https://github.com/felimart2003/feels-like-yesterday)
 
-- Shows yesterday and today weather side-by-side
-- Calculates and displays changes in temperature, feels-like, and precipitation
-- Gives a wear recommendation using a visual dial
-- Lets you record what you wore yesterday for personal tracking
-- Supports city search and geolocation
+![LayerUp desktop sample forecast](screenshot.png)
 
-## Data modes
+## Features
 
-LayerUp supports two weather data modes:
-
-1. **Keyless mode (default)**
-   - Uses Open-Meteo for live weather and location search
-   - Works out of the box without any API keys
-
-2. **Multi-source mode (optional)**
-   - Uses WeatherAPI, OpenWeather, and Visual Crossing
-   - Enable by adding keys in `app.js`:
-
-```js
-const WEATHERAPI_KEY  = "your_key";
-const OPENWEATHER_KEY = "your_key";
-const VISUALCROSS_KEY = "your_key";
-```
-
-If all 3 keys are provided, the app aggregates those sources.
+- City search and optional browser geolocation, with no API key or account.
+- Yesterday/today comparisons using the selected location's dates and daily averages.
+- Provider-supplied apparent temperature, daily precipitation totals, humidity, wind, and maximum UV index.
+- Temperature-based clothing suggestions and an accessible visual dial.
+- Private outfit notes scoped by location and date, stored on your device.
+- Explicit sample mode, visible network errors, request timeouts, and protection against stale search responses.
+- Responsive layout, keyboard focus, reduced motion, and screen-reader status announcements.
 
 ## Run locally
 
-Because this app makes network requests to weather APIs, run it from a local server (not plain `file://`).
+No dependency installation or build is required. From this directory:
 
-### Option A: VS Code Live Server
-
-- Install the Live Server extension
-- Right-click `index.html`
-- Select **Open with Live Server**
-
-### Option B: Python
-
-```bash
+```sh
 python -m http.server 5500
 ```
 
-Then open: `http://localhost:5500`
+Open http://localhost:5500. Location permission requires HTTPS or localhost. Live forecasts need internet access; **Explore sample** works without the weather service.
 
-## Project files
+Optional checks with Node.js 22 or newer:
 
-- `index.html` – page structure
-- `styles.css` – app styling
-- `app.js` – weather fetching, calculations, rendering, interactions
+```sh
+npm run check
+npm test
+```
 
-## Notes
+## Architecture
 
-- The "What Did You Wear Yesterday?" section now stores selection only and does not show explanatory popup feedback.
-- Geolocation requires browser permission.
-- If external APIs are unavailable, the app falls back to demo data as a safety net.
+This is a dependency-free HTML/CSS/JavaScript application. `app.js` resolves cities through Open-Meteo's geocoding API, requests hourly weather, aggregates each local calendar day, and renders the comparison. `styles.css` handles layout and accessibility states. Node's built-in test runner verifies weather boundaries, invalid coordinates, missing measurements, timezone handling, provider apparent temperatures, network failure, and unavailable storage.
+
+Only Open-Meteo is used. No paid weather providers, server secrets, frontend credentials, analytics, or database are required. Searches and coordinates are sent to Open-Meteo to retrieve forecasts. Outfit notes remain in browser localStorage; clearing site data removes them.
+
+## Data and limitations
+
+Temperatures, apparent temperatures, humidity, and wind are daily averages, not current observations. Precipitation is a daily sum; UV is the daily maximum. Today's remaining hours are a forecast, and yesterday's values are model data rather than a certified historical observation record. Conditions describe the midday hour. Search chooses the first matching city returned by the provider; add a more specific place name if needed. Clothing suggestions are general comfort guidance, not personalized safety advice.
+
+Sample data is always labeled and is never silently substituted for a failed live request. Failed searches preserve the previous forecast with an explicit message.
+
+## Deployment
+
+Hosted free on GitHub Pages from `main` at the repository root, using `.nojekyll`. Pushes to `main` publish the static files. No environment variables are needed. The same files can also be hosted by Cloudflare Pages or Netlify without a build command.
+
+Weather and geocoding: [Open-Meteo](https://open-meteo.com/) ([API documentation](https://open-meteo.com/en/docs), [terms](https://open-meteo.com/en/terms)).
