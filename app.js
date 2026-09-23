@@ -332,8 +332,8 @@ function setStatus(message, error = false) {
 }
 let requestId = 0;
 async function boot(city) {
-  const id = ++requestId;
   if (!city.trim()) { setStatus("Enter a city to search.", true); return; }
+  const id = ++requestId;
   overlay.classList.remove("hidden");
   setStatus("Finding your forecast…");
   try {
